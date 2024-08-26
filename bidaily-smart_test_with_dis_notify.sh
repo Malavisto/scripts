@@ -16,7 +16,8 @@ sleep 300  # 5 minutes; adjust based on the test type (short or long)
 LOGFILE="/var/log/smart_test_result.log"
 smartctl -a "$DRIVE" > "$LOGFILE"
 
-# Send Discord notification
+# Upload the log file to Discord
 WEBHOOK_URL="$DISCORD_WEBHOOK_URL"
-MESSAGE="SMART Test Results:\n$(cat $LOGFILE)"
-curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$MESSAGE\"}" "$WEBHOOK_URL"
+
+curl -X POST "$WEBHOOK_URL" \
+     -F "file=@$LOGFILE"
