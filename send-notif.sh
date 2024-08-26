@@ -1,5 +1,5 @@
 #!/bin/bash
-TEMP_MESSAGE_FILE="/tmp/smart_log_message.txt"
+
 
 DRIVE="/dev/sda"
 
@@ -7,8 +7,6 @@ DRIVE="/dev/sda"
 HOSTNAME=$(hostname)
 SYSTEM_TIME=$(date)
 
-# Create a temporary message file with the custom message
-echo "SMART log of $HOSTNAME at $SYSTEM_TIME:" > "$TEMP_MESSAGE_FILE"
 
 
 #Collect Variables
@@ -22,7 +20,13 @@ chmod +rwx "$LOGFILE"
 
 WEBHOOK_URL="$DISCORD_WEBHOOK_URL"
 
-# Upload both the message and the log file to Discord
+# Send a text message to Discord
 curl -X POST "$WEBHOOK_URL" \
-     -F "file=@$TEMP_MESSAGE_FILE" \
+     -H "Content-Type: application/json" \
+     -d "{\"content\": \"SMART log of $HOSTNAME at $SYSTEM_TIME:\"}"
+
+# Upload the log file to Discord
+curl -X POST "$WEBHOOK_URL" \
      -F "file=@$LOGFILE"
+
+echo "SMART test results and message uploaded to Discord"     

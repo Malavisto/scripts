@@ -5,14 +5,10 @@ source ./config.env
 WEBHOOK_URL="$DISCORD_WEBHOOK_URL"
 DRIVE="/dev/sda"
 LOGFILE="/var/log/smart_test_result.log"
-TEMP_MESSAGE_FILE="/tmp/smart_log_message.txt"
 
 # Get hostname and system time
 HOSTNAME=$(hostname)
 SYSTEM_TIME=$(date)
-
-# Create a temporary message file with the custom message
-echo "SMART log of $HOSTNAME at $SYSTEM_TIME:" > "$TEMP_MESSAGE_FILE"
 
 # Run a short SMART test
 smartctl -t short "$DRIVE"
@@ -23,10 +19,13 @@ sleep 180  # 3 minutes; adjust based on the test type (short or long)
 # Log the results
 smartctl -a "$DRIVE" > "$LOGFILE"
 
-# Upload both the message and the log file to Discord
+# Send a text message to Discord
 curl -X POST "$WEBHOOK_URL" \
-     -F "file=@$TEMP_MESSAGE_FILE" \
+     -H "Content-Type: application/json" \
+     -d "{\"content\": \"SMART log of $HOSTNAME at $SYSTEM_TIME:\"}"
+
+# Upload the log file to Discord
+curl -X POST "$WEBHOOK_URL" \
      -F "file=@$LOGFILE"
 
-# Clean up temporary files
-rm "$TEMP_MESSAGE_FILE"     
+echo "SMART test results and message uploaded to Discord"
