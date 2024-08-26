@@ -7,6 +7,12 @@ DRIVE="/dev/sda"
 LOGFILE="/var/log/smart_test_result.log"
 TEMP_MESSAGE_FILE="/tmp/smart_log_message.txt"
 
+# Get hostname and system time
+HOSTNAME=$(hostname)
+SYSTEM_TIME=$(date)
+
+# Create a temporary message file with the custom message
+echo "SMART log of $HOSTNAME at $SYSTEM_TIME:" > "$TEMP_MESSAGE_FILE"
 
 # Run a short SMART test
 smartctl -t short "$DRIVE"

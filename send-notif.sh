@@ -1,9 +1,15 @@
 #!/bin/bash
+TEMP_MESSAGE_FILE="/tmp/smart_log_message.txt"
+
 DRIVE="/dev/sda"
 
 # Get hostname and system time
 HOSTNAME=$(hostname)
 SYSTEM_TIME=$(date)
+
+# Create a temporary message file with the custom message
+echo "SMART log of $HOSTNAME at $SYSTEM_TIME:" > "$TEMP_MESSAGE_FILE"
+
 
 #Collect Variables
 source ./config.env
