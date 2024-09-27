@@ -2,3 +2,4 @@
 .vscode/
 gpu/
 smart-testing/config.env
+*.log
