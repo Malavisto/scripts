@@ -3,3 +3,4 @@
 gpu/
 smart-testing/config.env
 *.log
+photos/
