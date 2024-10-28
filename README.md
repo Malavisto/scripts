@@ -1,6 +1,6 @@
 # Scripts Repository
 
-Welcome to the **Scripts Repository** by [Malavisto](https://github.com/Malavisto) hosted on both [GitHub](https://github.com/Malavisto/scripts). This collection includes scripts for automation, system management, and personal use. Each script is documented with usage instructions and dependencies to simplify setup.
+Welcome to the **Scripts Repository** by [Malavisto](https://github.com/Malavisto) hosted on [GitHub](https://github.com/Malavisto/scripts). This collection includes scripts for automation, system management, and personal use. Each script is documented with usage instructions and dependencies to simplify setup.
 
 ## Contents
 
@@ -24,6 +24,5 @@ Each script may have unique dependencies, but common requirements include:
 You can clone the repository from either GitHub or GitLab:
 
 ```bash
-# From GitHub
 git clone https://github.com/Malavisto/scripts.git
 
