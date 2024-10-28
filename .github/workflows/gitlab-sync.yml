@@ -24,8 +24,8 @@ jobs:
           GIT_NAME: ${{ secrets.GIT_NAME }}      
         run: |
           cd gitlab-repo
-          git config user.email "${GH_EMAIL}"
-          git config user.name "${GH_NAME}"
+          git config user.email "${GIT_EMAIL}"
+          git config user.name "${GIT_NAME}"
           
       - name: Pull and Push to GitHub
         run: |
