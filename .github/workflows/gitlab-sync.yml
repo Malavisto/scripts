@@ -20,8 +20,8 @@ jobs:
           
       - name: Set Git Config
         env:
-          GIT_EMAIL: ${{ secrets.GIT_EMAIL }}
-          GIT_NAME: ${{ secrets.GIT_NAME }}      
+          GIT_EMAIL: ${{ secrets.GH_EMAIL }}
+          GIT_NAME: ${{ secrets.GH_NAME }}      
         run: |
           cd gitlab-repo
           git config user.email "${GIT_EMAIL}"
