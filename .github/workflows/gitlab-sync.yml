@@ -19,6 +19,9 @@ jobs:
           git remote add origin https://Malavisto:${{ secrets.GH_PAT }}@github.com/Malavisto/scripts.git
           
       - name: Set Git Config
+        env:
+          GIT_EMAIL: ${{ secrets.GIT_EMAIL }}
+          GIT_NAME: ${{ secrets.GIT_NAME }}      
         run: |
           cd gitlab-repo
           git config user.email "${GH_EMAIL}"
