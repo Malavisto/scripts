@@ -1,0 +1,14 @@
+stages:
+  - trigger_github
+
+trigger_github_action:
+  stage: trigger_github
+  script:
+    - |
+      curl -X POST \
+      -H "Accept: application/vnd.github+json" \
+      -H "Authorization: token $GH_PAT" \
+      https://api.github.com/repos/Malavisto/scripts/actions/workflows/gitlab-sync.yml/dispatches \
+      -d '{"ref": "main"}'
+  only:
+    - main  # Specify which branches should trigger the job
