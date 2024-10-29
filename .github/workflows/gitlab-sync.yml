@@ -4,7 +4,10 @@ on:
   schedule:
     - cron: '0 0 * * *' # Runs daily; adjust as needed
   workflow_dispatch:
-
+    inputs:
+      event_type:
+        required: true
+        default: "gitlab_sync"
 jobs:
   sync:
     runs-on: ubuntu-latest
