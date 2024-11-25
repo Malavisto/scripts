@@ -2,10 +2,5 @@
 .vscode/
 gpu/
 smart-testing/config.env
-<<<<<<< HEAD
-*.log
-photos/
-=======
 anilist.py
 java/*
->>>>>>> 8e581ab (Update .gitignore)
