@@ -1,6 +1,10 @@
 const dns = require('dns');
 const { performance } = require('perf_hooks');
 
+function getDefaultDNSServers() {
+    return dns.getServers();
+}
+
 function measureDNSQueryTime(domain, dnsServer = null) {
     return new Promise((resolve, reject) => {
         // Create a custom resolver if DNS server is specified
@@ -48,13 +52,17 @@ async function main() {
             '1.1.1.1',              // Cloudflare DNS
         ];
         
-        console.log('Starting DNS query measurements...\n');
+        // Show default DNS servers
+        const defaultServers = getDefaultDNSServers();
+        console.log('System Default DNS Servers:');
+        defaultServers.forEach(server => console.log(`├─ ${server}`));
+        console.log('\nStarting DNS query measurements...\n');
         
         for (const domain of domains) {
             console.log(`Domain: ${domain}`);
             
             for (const server of dnsServers) {
-                const serverName = server || 'Default DNS';
+                const serverName = server || `Default DNS (${defaultServers.join(', ')})`;
                 console.log(`\nTesting with ${serverName}...`);
                 
                 try {
