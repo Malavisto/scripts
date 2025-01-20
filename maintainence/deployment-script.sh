@@ -21,7 +21,6 @@ else
     PIPED=1
 fi
 
-
 # Default values
 GITHUB_RAW_URL="https://raw.githubusercontent.com/Malavisto/scripts/refs/heads/main/maintainence/server-maintenance.sh"
 DEFAULT_INSTALL_DIR="/opt/server-maintenance"
@@ -38,11 +37,12 @@ else
     YELLOW=''
     NC=''
 fi
+
 # Function to print colored messages
 print_message() {
     local color=$1
     local message=$2
-    echo -e "${color}${message}${NC}"
+    printf "${color}%s${NC}\n" "$message"
 }
 
 # Function to check if a command exists
@@ -61,25 +61,32 @@ check_command "chmod"
 print_message "$GREEN" "Server Maintenance Script Deployment"
 print_message "$GREEN" "======================================"
 
-# Get installation directory from user
-read -p "Enter installation directory [$DEFAULT_INSTALL_DIR]: " INSTALL_DIR
-INSTALL_DIR=${INSTALL_DIR:-$DEFAULT_INSTALL_DIR}
+# Get installation directory from user with proper variable handling
+INSTALL_DIR=""
+while [ -z "$INSTALL_DIR" ]; do
+    read -p "Enter installation directory [$DEFAULT_INSTALL_DIR]: " INSTALL_DIR_INPUT
+    INSTALL_DIR=${INSTALL_DIR_INPUT:-$DEFAULT_INSTALL_DIR}
+    
+    # Validate the directory path
+    if [[ ! "$INSTALL_DIR" =~ ^/ ]]; then
+        print_message "$RED" "Error: Please provide an absolute path (starting with /)."
+        INSTALL_DIR=""
+    fi
+done
 
-# Create installation directory
+# Create installation directory with error handling
 if [ ! -d "$INSTALL_DIR" ]; then
     print_message "$YELLOW" "Creating directory: $INSTALL_DIR"
-    sudo mkdir -p "$INSTALL_DIR"
-    if [ $? -ne 0 ]; then
-        print_message "$RED" "Error: Failed to create directory"
+    if ! sudo mkdir -p "$INSTALL_DIR"; then
+        print_message "$RED" "Error: Failed to create directory $INSTALL_DIR"
         exit 1
     fi
 fi
 
-# Download the maintenance script
+# Download the maintenance script with error handling
 print_message "$GREEN" "Downloading maintenance script..."
-sudo curl -s -o "$INSTALL_DIR/server-maintenance.sh" "$GITHUB_RAW_URL"
-if [ $? -ne 0 ]; then
-    print_message "$RED" "Error: Failed to download the script"
+if ! sudo curl -s -o "$INSTALL_DIR/server-maintenance.sh" "$GITHUB_RAW_URL"; then
+    print_message "$RED" "Error: Failed to download the script from $GITHUB_RAW_URL"
     exit 1
 fi
 
@@ -89,14 +96,24 @@ sudo chmod 755 "$INSTALL_DIR/server-maintenance.sh"
 # Create .env file
 print_message "$GREEN" "Setting up .env file..."
 if [ ! -f "$INSTALL_DIR/.env" ]; then
-    # Get Discord webhook URL from user
-    read -p "Enter Discord webhook URL: " DISCORD_WEBHOOK
+    # Get Discord webhook URL from user with validation
+    DISCORD_WEBHOOK=""
+    while [ -z "$DISCORD_WEBHOOK" ]; do
+        read -p "Enter Discord webhook URL: " DISCORD_WEBHOOK
+        if [ -z "$DISCORD_WEBHOOK" ]; then
+            print_message "$RED" "Discord webhook URL cannot be empty."
+        fi
+    done
     
     # Create .env file with restricted permissions
-    sudo bash -c "cat > $INSTALL_DIR/.env" << EOL
+    if ! sudo bash -c "cat > '$INSTALL_DIR/.env'" << EOL
 # Environment variables for server maintenance script
 DISCORD_WEBHOOK="$DISCORD_WEBHOOK"
 EOL
+    then
+        print_message "$RED" "Error: Failed to create .env file"
+        exit 1
+    fi
     
     sudo chmod 600 "$INSTALL_DIR/.env"
     print_message "$GREEN" ".env file created successfully"
@@ -112,14 +129,12 @@ if [[ $SETUP_CRON =~ ^[Yy]$ ]]; then
     # Create cron job
     CRON_CMD="0 3 * * * $INSTALL_DIR/server-maintenance.sh >> /var/log/server-maintenance.log 2>&1"
     
-    # Add to root's crontab
-    (sudo crontab -l 2>/dev/null | grep -v "server-maintenance.sh"; echo "$CRON_CMD") | sudo crontab -
-    
-    if [ $? -eq 0 ]; then
-        print_message "$GREEN" "Cron job set up successfully"
-    else
+    # Add to root's crontab with error handling
+    if ! (sudo crontab -l 2>/dev/null | grep -v "server-maintenance.sh"; echo "$CRON_CMD") | sudo crontab -; then
         print_message "$RED" "Failed to set up cron job"
+        exit 1
     fi
+    print_message "$GREEN" "Cron job set up successfully"
 fi
 
 # Final setup verification
