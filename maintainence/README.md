@@ -19,7 +19,7 @@ Automated server maintenance script for Ubuntu servers that performs common main
 Deploy the maintenance script with a single command:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/yourusername/yourrepo/main/deploy.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/Malavisto/scripts/refs/heads/main/maintainence/deployment-script.sh | sudo bash
 ```
 
 This will:
@@ -36,18 +36,18 @@ If you prefer to inspect the script before running it, you can:
 
 1. Download the deployment script:
 ```bash
-curl -O https://raw.githubusercontent.com/yourusername/yourrepo/main/deploy.sh
+curl -O https://raw.githubusercontent.com/Malavisto/scripts/refs/heads/main/maintainence/deployment-script.sh
 ```
 
 2. Review the script content:
 ```bash
-less deploy.sh
+less deployment-script.sh
 ```
 
 3. Make it executable and run:
 ```bash
-chmod +x deploy.sh
-sudo ./deploy.sh
+chmod +x deployment-script.sh
+sudo ./deployment-script.sh
 ```
 
 ## Configuration
@@ -66,7 +66,7 @@ The script will prompt you for:
 
 ## Requirements
 
-- Ubuntu/Debian-based system
+- Ubuntu/Debian-based system (probably works on other linux systems)
 - Root/sudo access
 - curl installed
 - Discord webhook URL for notifications
@@ -104,4 +104,4 @@ Feel free to open issues or submit pull requests with improvements.
 
 ## License
 
-[MIT License](LICENSE)
+[MIT License](https://github.com/Malavisto/scripts/blob/main/LICENSE)
