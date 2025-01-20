@@ -4,22 +4,46 @@
 # This script performs common maintenance tasks on Ubuntu servers
 # Recommended to run as a daily/weekly cron job
 
+# Load environment variables
+# Get script directory (works with symlinks too)
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+ENV_FILE="$SCRIPT_DIR/.env"
+
+if [ ! -f "$ENV_FILE" ]; then
+    echo "Error: .env file not found at $ENV_FILE"
+    exit 1
+fi
+
+# Source the .env file
+set -a  # automatically export all variables
+source "$ENV_FILE"
+set +a
+
+# Verify required environment variables
+if [ -z "$DISCORD_WEBHOOK" ]; then
+    echo "Error: DISCORD_WEBHOOK not set in $ENV_FILE"
+    exit 1
+fi
 # Configuration
 LOG_FILE="/var/log/server-maintenance.log"
-DISCORD_WEBHOOK="YOUR_DISCORD_WEBHOOK_URL"  # Replace with your Discord webhook URL
 
 # Function to log messages
 log_message() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
 }
 
+# Function to escape JSON for Discord
+escape_json() {
+    echo "$1" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g'
+}
+
 # Function to send Discord notification
 send_discord_notification() {
-    local message="$1"
+    local message=$(escape_json "$1")
     curl -H "Content-Type: application/json" \
          -X POST \
          -d "{\"content\":\"$message\"}" \
-         "$DISCORD_WEBHOOK"
+         "$DISCORD_WEBHOOK" 2>/dev/null
 }
 
 # Check if running as root
@@ -42,7 +66,12 @@ RESTART_REQUIRED=false
 if [ -f /var/run/reboot-required ]; then
     RESTART_REQUIRED=true
     PACKAGES_REQUIRING_RESTART=$(cat /var/run/reboot-required.pkgs)
-    send_discord_notification "🔄 **Restart Required**: System restart needed on $(hostname)\n\nPackages requiring restart:\n\`\`\`$PACKAGES_REQUIRING_RESTART\`\`\`"
+    send_discord_notification "🔄 **Restart Required**: System restart needed on $(hostname)
+
+Packages requiring restart:
+\`\`\`
+$(echo "$PACKAGES_REQUIRING_RESTART" | head -n 10)
+\`\`\`"
 fi
 
 # Additional check for kernel updates
@@ -54,9 +83,12 @@ if [ "$CURRENT_KERNEL" != "$LATEST_KERNEL" ]; then
 fi
 
 # Check for services that need restart
-SERVICES_TO_RESTART=$(needrestart -b 2>/dev/null | grep "NEEDRESTART-SVC" || true)
+SERVICES_TO_RESTART=$(needrestart -b 2>/dev/null | grep "NEEDRESTART-SVC" | head -n 10 || true)
 if [ -n "$SERVICES_TO_RESTART" ]; then
-    send_discord_notification "🔄 **Services Need Restart**: The following services need to be restarted on $(hostname):\n\`\`\`$SERVICES_TO_RESTART\`\`\`"
+    send_discord_notification "🔄 **Services Need Restart**: The following services need to be restarted on $(hostname):
+\`\`\`
+$SERVICES_TO_RESTART
+\`\`\`"
 fi
 
 # Remove unused packages and clean package cache
@@ -89,14 +121,17 @@ fi
 
 # Check for failed systemd services
 log_message "Checking for failed services"
-FAILED_SERVICES=$(systemctl --failed)
+FAILED_SERVICES=$(systemctl --failed --no-pager --plain)
 if [ -n "$FAILED_SERVICES" ]; then
-    send_discord_notification "🚨 **Alert**: Failed services detected on $(hostname):\n\`\`\`$FAILED_SERVICES\`\`\`"
+    send_discord_notification "🚨 **Alert**: Failed services detected on $(hostname):
+\`\`\`
+$(echo "$FAILED_SERVICES" | head -n 10)
+\`\`\`"
 fi
 
 # Monitor system load
 log_message "Current system load:"
-SYSTEM_LOAD=$(uptime | awk '{print $10}' | cut -d',' -f1)
+SYSTEM_LOAD=$(uptime | awk '{print $(NF-2)}' | tr -d ',')
 if [ "$(echo "$SYSTEM_LOAD > 4" | bc)" -eq 1 ]; then
     send_discord_notification "⚠️ **Warning**: High system load (${SYSTEM_LOAD}) detected on $(hostname)"
 fi
