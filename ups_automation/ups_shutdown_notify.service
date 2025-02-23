@@ -1,0 +1,15 @@
+[Unit]
+Description=UPS Shutdown and Notification Service
+After=network.target
+
+[Service]
+ExecStart=/path/to/ups_shutdown_notify.sh # Change this to the path of your script
+Restart=always
+User=root
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=ups_shutdown_notify
+EnvironmentFile=/etc/ups_shutdown_notify.env # Change this to the path of your environment file
+
+[Install]
+WantedBy=multi-user.target
