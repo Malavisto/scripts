@@ -1,10 +1,22 @@
 #!/bin/bash
 
-# Get environment variables
-TELEGRAM_API_KEY=$TELEGRAM_API_KEY
-TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
-DISCORD_WEBHOOK_URL=$DISCORD_WEBHOOK_URL
-UPS_NAME=$UPS_NAME
+# Get script directory for relative .env path
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Load environment variables from .env in script directory
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    export $(cat "$SCRIPT_DIR/.env" | grep -v '#' | xargs)
+else
+    echo "Error: .env file not found in $SCRIPT_DIR"
+    exit 1
+fi
+
+# Validate required environment variables
+if [ -z "$TELEGRAM_API_KEY" ] || [ -z "$TELEGRAM_CHAT_ID" ] || [ -z "$DISCORD_WEBHOOK_URL" ] || [ -z "$UPS_NAME" ]; then
+    echo "Error: Missing required environment variables"
+    exit 1
+fi
+
 BATTERY_THRESHOLD=20 
 STATE_FILE="/tmp/ups_state.txt"
 
@@ -30,6 +42,7 @@ send_notifications() {
     send_telegram "$message"
     send_discord "$message"
 }
+
 # Check UPS battery status
 battery_status=$(upsc $UPS_NAME | grep "battery.charge" | awk '{print $2}')
 ups_status=$(upsc $UPS_NAME | grep "ups.status" | awk '{print $2}')
