@@ -5,3 +5,4 @@ smart-testing/config.env
 anilist.py
 java/*
 .qodo/
+.env
