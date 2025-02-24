@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # ------------------------------------------------------------------------------------
 # UPS Shutdown Notify Script with Debug Outputs
@@ -32,7 +33,8 @@ fi
 
 # Validate required environment variables
 if [ -z "$TELEGRAM_API_KEY" ] || [ -z "$TELEGRAM_CHAT_ID" ] || [ -z "$DISCORD_WEBHOOK_URL" ] || [ -z "$UPS_NAME" ] || [ -z "$BATTERY_PERCENT" ]; then
-    echo "Error: Missing required environment variables (TELEGRAM_API_KEY, TELEGRAM_CHAT_ID, DISCORD_WEBHOOK_URL, UPS_NAME, BATTERY_PERCENT)."    exit 1
+    echo "Error: Missing required environment variables (TELEGRAM_API_KEY, TELEGRAM_CHAT_ID, DISCORD_WEBHOOK_URL, UPS_NAME, BATTERY_PERCENT)."
+    exit 1
 fi
 
 # Configuration
@@ -42,10 +44,13 @@ STATE_FILE="$SCRIPT_DIR/ups_state.txt"
 # Function to send Telegram notification
 send_telegram() {
     local message="$1"
-    # -s suppresses curl progress bar, remove -s if you want more curl debug
     curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_API_KEY/sendMessage" \
         -d chat_id="$TELEGRAM_CHAT_ID" \
         -d text="$message"
+    if [ $? -ne 0 ]; then
+        echo "[ERROR] Failed to send Telegram notification"
+        # Handle the error, e.g., retry or log
+    fi
 }
 
 # Function to send Discord notification
@@ -54,6 +59,10 @@ send_discord() {
     curl -s -X POST "$DISCORD_WEBHOOK_URL" \
         -H "Content-Type: application/json" \
         -d '{"content":"'"$message"'"}'
+    if [ $? -ne 0 ]; then
+        echo "[ERROR] Failed to send Discord notification"
+        # Handle the error, e.g., retry or log
+    fi
 }
 
 # Function to send notifications to both platforms and stdout
@@ -87,7 +96,12 @@ previous_battery="UNKNOWN"
 if [ -f "$STATE_FILE" ]; then
     echo "[DEBUG] Loading previous state from $STATE_FILE"
     # shellcheck disable=SC1090
-    . "$STATE_FILE"
+    if [ -r "$STATE_FILE" ]; then
+        . "$STATE_FILE"
+    else
+        echo "[ERROR] State file is not readable. Exiting..."
+        exit 1
+    fi
 else
     echo "[DEBUG] No previous state file found; using defaults."
 fi
@@ -101,7 +115,7 @@ if [ "$ups_status" = "OB" ] && [ "$previous_status" != "OB" ]; then
 elif [ "$ups_status" = "OL" ] && [ "$previous_status" = "OB" ]; then
     send_notifications "✅ Power has been restored. UPS is back on main power."
 else
-    echo "[DEBUG] No OB/OL status change detected."
+    printf "[DEBUG] No OB/OL status change detected.\n"
 fi
 
 # Check if battery level became critical
