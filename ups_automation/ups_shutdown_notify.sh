@@ -31,14 +31,13 @@ else
 fi
 
 # Validate required environment variables
-if [ -z "$TELEGRAM_API_KEY" ] || [ -z "$TELEGRAM_CHAT_ID" ] || [ -z "$DISCORD_WEBHOOK_URL" ] || [ -z "$UPS_NAME" ]; then
-    echo "Error: Missing required environment variables (TELEGRAM_API_KEY, TELEGRAM_CHAT_ID, DISCORD_WEBHOOK_URL, UPS_NAME)."
-    exit 1
+if [ -z "$TELEGRAM_API_KEY" ] || [ -z "$TELEGRAM_CHAT_ID" ] || [ -z "$DISCORD_WEBHOOK_URL" ] || [ -z "$UPS_NAME" ] || [ -z "$BATTERY_PERCENT" ]; then
+    echo "Error: Missing required environment variables (TELEGRAM_API_KEY, TELEGRAM_CHAT_ID, DISCORD_WEBHOOK_URL, UPS_NAME, BATTERY_PERCENT)."    exit 1
 fi
 
 # Configuration
-BATTERY_THRESHOLD=20
-STATE_FILE="/tmp/ups_state.txt"
+BATTERY_THRESHOLD=$BATTERY_PERCENT
+STATE_FILE="$SCRIPT_DIR/ups_state.txt"
 
 # Function to send Telegram notification
 send_telegram() {
@@ -107,8 +106,8 @@ fi
 
 # Check if battery level became critical
 if [ "$battery_status" -le "$BATTERY_THRESHOLD" ] && [ "$previous_battery" -gt "$BATTERY_THRESHOLD" ]; then
-    send_notifications "🔋 Battery level critical ($battery_status%). Initiating shutdown..."
-    /sbin/shutdown -h now
+    send_notifications "🔋 Battery level at threshold ($battery_status%). Initiating shutdown..."
+    /usr/sbin/shutdown +0
 else
     echo "[DEBUG] Battery not in critical threshold or no change from previous."
 fi
