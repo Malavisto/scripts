@@ -1,17 +1,28 @@
 #!/usr/bin/env python3
 
+import argparse
 import os
 import sys
 import subprocess
 import yaml
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Set
+
+
+class DockerComposeError(Exception):
+    """Base exception for Docker Compose Manager errors."""
+    pass
+
+
+class ComposeFileNotFoundError(DockerComposeError):
+    """Exception raised when no compose file is found."""
+    pass
 
 
 class DockerComposeManager:
     """Manages Docker Compose services interactively."""
 
-    def __init__(self):
-        self.compose_file = self._find_compose_file()
+    def __init__(self, compose_file=None):
+        self.compose_file = compose_file if compose_file else self._find_compose_file()
         self.services = self._parse_services()
 
     def _find_compose_file(self) -> str:
@@ -28,9 +39,10 @@ class DockerComposeManager:
                 print(f"Found Docker Compose file: {file}")
                 return file
 
-        print("Error: No Docker Compose file found in the current directory.")
-        print("Looked for: compose.yml, compose.yaml, docker-compose.yml, docker-compose.yaml")
-        sys.exit(1)
+        raise ComposeFileNotFoundError(
+            f"No Docker Compose file found in the current directory. "
+            f"Looked for: {', '.join(possible_files)}"
+        )
 
     def _parse_services(self) -> Dict[str, Dict]:
         """Parse the Docker Compose file and extract services."""
@@ -62,6 +74,9 @@ class DockerComposeManager:
         except subprocess.CalledProcessError:
             # If the command fails, assume no services are running
             return set()
+        except FileNotFoundError:
+            print("Error: Docker or Docker Compose not found. Please ensure Docker is installed and in your PATH.")
+            sys.exit(1)
 
     def stop_all_services(self):
         """Stop all running Docker Compose services."""
@@ -77,24 +92,52 @@ class DockerComposeManager:
             except subprocess.CalledProcessError as e:
                 print(f"Error stopping services: {e}")
                 sys.exit(1)
+            except FileNotFoundError:
+                print("Error: Docker or Docker Compose not found. Please ensure Docker is installed and in your PATH.")
+                sys.exit(1)
         else:
             print("No running services to stop.")
+
+    def validate_services(self, services: List[str]) -> List[str]:
+        """Validate that services exist in the Docker Compose file."""
+        valid_services = []
+        invalid_services = []
+    
+        for service in services:
+            if service in self.services:
+                valid_services.append(service)
+            else:
+                invalid_services.append(service)
+    
+        if invalid_services:
+            print(f"Warning: The following services do not exist in the compose file: {', '.join(invalid_services)}")
+    
+        return valid_services
 
     def start_services(self, services: List[str]):
         """Start the specified Docker Compose services."""
         if not services:
             print("No services selected to start.")
             return
-
+        
+        # Validate services before starting
+        valid_services = self.validate_services(services)
+        if not valid_services:
+            print("No valid services to start.")
+            return
+        
         try:
             cmd = ["docker", "compose", "-f", self.compose_file, "up", "-d"]
-            cmd.extend(services)
+            cmd.extend(valid_services)
             
-            print(f"Starting services: {', '.join(services)}...")
+            print(f"Starting services: {', '.join(valid_services)}...")
             subprocess.run(cmd, check=True)
             print("Services started successfully.")
         except subprocess.CalledProcessError as e:
             print(f"Error starting services: {e}")
+            sys.exit(1)
+        except FileNotFoundError:
+            print("Error: Docker or Docker Compose not found. Please ensure Docker is installed and in your PATH.")
             sys.exit(1)
 
     def display_service_logs(self, services: List[str], follow: bool = True):
@@ -114,6 +157,9 @@ class DockerComposeManager:
             print("\nStopped following logs.")
         except subprocess.CalledProcessError as e:
             print(f"Error displaying logs: {e}")
+        except FileNotFoundError:
+            print("Error: Docker or Docker Compose not found. Please ensure Docker is installed and in your PATH.")
+            sys.exit(1)
 
     def interactive_service_selection(self) -> List[str]:
         """Interactively select services to start."""
@@ -147,34 +193,56 @@ class DockerComposeManager:
             return self.interactive_service_selection()
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Docker Compose Service Manager")
+    parser.add_argument("-f", "--file", help="Path to Docker Compose file")
+    parser.add_argument("--no-logs", action="store_true", help="Don't follow logs after starting services")
+    parser.add_argument("--services", help="Comma-separated list of services to start")
+    return parser.parse_args()
+
+
 def main():
     """Main function to run the Docker Compose service manager."""
     print("Docker Compose Service Manager")
     print("==============================")
     
-    manager = DockerComposeManager()
+    args = parse_arguments()
     
-    # Get running services
-    running_services = manager.get_running_services()
-    if running_services:
-        print(f"Currently running services: {', '.join(running_services)}")
-    else:
-        print("No services are currently running.")
+    try:
+        manager = DockerComposeManager(args.file)
+        
+        # Get running services
+        running_services = manager.get_running_services()
+        if running_services:
+            print(f"Currently running services: {', '.join(running_services)}")
+        else:
+            print("No services are currently running.")
+        
+        # Select services to start
+        if args.services:
+            selected_services = args.services.split(',')
+        else:
+            selected_services = manager.interactive_service_selection()
+        print(f"Selected services: {', '.join(selected_services)}")
+        
+        # Stop running services
+        manager.stop_all_services()
+        
+        # Start selected services
+        manager.start_services(selected_services)
+        
+        # Ask if user wants to see logs
+        if not args.no_logs:
+            print("\nDo you want to see the logs? (y/n)")
+            if input("> ").strip().lower() == 'y':
+                manager.display_service_logs(selected_services)
     
-    # Select services to start
-    selected_services = manager.interactive_service_selection()
-    print(f"Selected services: {', '.join(selected_services)}")
-    
-    # Stop running services
-    manager.stop_all_services()
-    
-    # Start selected services
-    manager.start_services(selected_services)
-    
-    # Ask if user wants to see logs
-    print("\nDo you want to see the logs? (y/n)")
-    if input("> ").strip().lower() == 'y':
-        manager.display_service_logs(selected_services)
+    except ComposeFileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    except DockerComposeError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
