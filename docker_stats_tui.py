@@ -5,7 +5,6 @@ Docker Stats TUI - A terminal-based UI for monitoring Docker container stats
 
 import os
 import sys
-import time
 import json
 import subprocess
 import curses
@@ -19,6 +18,16 @@ class DockerStatsTUI:
         self.stats = {}
         self.running = True
         self.refresh_rate = 1  # seconds
+        # Minimum column widths to ensure readability
+        self.min_widths = {
+            "container": 10,
+            "cpu": 6,
+            "mem_usage": 12,
+            "mem_perc": 6,
+            "net_io": 10,
+            "block_io": 10,
+            "pids": 5
+        }
 
     def check_docker_running(self):
         """Check if Docker daemon is running"""
@@ -152,12 +161,70 @@ class DockerStatsTUI:
                 if stats:
                     new_stats[container_id] = stats
         self.stats = new_stats
+        
+    def calculate_column_widths(self, max_x):
+        """Calculate column widths based on terminal width"""
+        # Total available space minus borders/padding
+        available_width = max_x - 7  # Account for some spacing between columns
+        
+        # Calculate container name width (dynamically sized, gets extra space)
+        # First, allocate minimum space for the fixed-width columns
+        fixed_width_total = sum([
+            self.min_widths["cpu"],
+            self.min_widths["mem_usage"],
+            self.min_widths["mem_perc"],
+            self.min_widths["net_io"],
+            self.min_widths["block_io"],
+            self.min_widths["pids"]
+        ])
+        
+        # Container column gets the remaining space, but at least its minimum width
+        container_width = max(self.min_widths["container"], available_width - fixed_width_total)
+        
+        # If terminal is very narrow, distribute the available space proportionally
+        if available_width < fixed_width_total + self.min_widths["container"]:
+            # Calculate proportional distribution
+            total_min = sum(self.min_widths.values())
+            container_width = max(2, int(available_width * self.min_widths["container"] / total_min))
+            cpu_width = max(2, int(available_width * self.min_widths["cpu"] / total_min))
+            mem_usage_width = max(2, int(available_width * self.min_widths["mem_usage"] / total_min))
+            mem_perc_width = max(2, int(available_width * self.min_widths["mem_perc"] / total_min))
+            net_io_width = max(2, int(available_width * self.min_widths["net_io"] / total_min))
+            block_io_width = max(2, int(available_width * self.min_widths["block_io"] / total_min))
+            pids_width = max(2, int(available_width * self.min_widths["pids"] / total_min))
+        else:
+            # Normal distribution with minimum widths
+            cpu_width = self.min_widths["cpu"]
+            mem_usage_width = self.min_widths["mem_usage"]
+            mem_perc_width = self.min_widths["mem_perc"]
+            net_io_width = self.min_widths["net_io"]
+            block_io_width = self.min_widths["block_io"]
+            pids_width = self.min_widths["pids"]
+        
+        return {
+            "container": container_width,
+            "cpu": cpu_width,
+            "mem_usage": mem_usage_width,
+            "mem_perc": mem_perc_width,
+            "net_io": net_io_width,
+            "block_io": block_io_width,
+            "pids": pids_width
+        }
+    
+    def truncate_text(self, text, max_width):
+        """Truncate text if it's longer than max_width"""
+        if len(text) > max_width - 3 and max_width > 3:
+            return text[:max_width - 3] + "..."
+        return text[:max_width]
 
     def draw_ui(self, stdscr):
         """Draw the TUI using curses"""
         curses.curs_set(0)  # Hide cursor
         curses.start_color()
         curses.use_default_colors()
+        
+        # Enable handling of window resize
+        stdscr.nodelay(1)
         
         # Define color pairs
         curses.init_pair(1, curses.COLOR_GREEN, -1)
@@ -177,45 +244,63 @@ class DockerStatsTUI:
                 # Get terminal size
                 max_y, max_x = stdscr.getmaxyx()
                 
+                # Calculate column widths based on terminal size
+                widths = self.calculate_column_widths(max_x)
+                
                 # Clear screen
                 stdscr.clear()
                 
                 # Draw header
                 header = "Docker Stats TUI"
-                stdscr.addstr(0, (max_x - len(header)) // 2, header, curses.A_BOLD)
+                stdscr.addstr(0, max(0, (max_x - len(header)) // 2), header, curses.A_BOLD)
                 
                 # Draw project info if available
                 if self.compose_project:
                     project_info = f"Compose Project: {self.compose_project['name']} ({self.compose_project['file']})"
+                    project_info = self.truncate_text(project_info, max_x - 1)
                     stdscr.addstr(1, 0, project_info, CYAN)
                 else:
-                    stdscr.addstr(1, 0, "System-wide Docker Containers", CYAN)
+                    info_text = "System-wide Docker Containers"
+                    stdscr.addstr(1, 0, info_text, CYAN)
                 
                 # Draw current time
                 time_str = datetime.now().strftime("%H:%M:%S")
-                stdscr.addstr(1, max_x - len(time_str) - 1, time_str)
+                if max_x > len(time_str) + 1:
+                    stdscr.addstr(1, max_x - len(time_str) - 1, time_str)
                 
                 # Draw column headers
                 headers = ["CONTAINER", "CPU %", "MEM USAGE / LIMIT", "MEM %", "NET I/O", "BLOCK I/O", "PIDS"]
                 header_y = 3
                 
-                # Calculate column widths
-                container_width = max(20, max_x // 4)
-                cpu_width = 8
-                mem_usage_width = 20
-                mem_perc_width = 8
-                net_io_width = 15
-                block_io_width = 15
-                pids_width = 8
+                # Position tracking for columns
+                x_pos = 0
                 
-                # Draw headers
-                stdscr.addstr(header_y, 0, headers[0].ljust(container_width), curses.A_BOLD)
-                stdscr.addstr(header_y, container_width, headers[1].ljust(cpu_width), curses.A_BOLD)
-                stdscr.addstr(header_y, container_width + cpu_width, headers[2].ljust(mem_usage_width), curses.A_BOLD)
-                stdscr.addstr(header_y, container_width + cpu_width + mem_usage_width, headers[3].ljust(mem_perc_width), curses.A_BOLD)
-                stdscr.addstr(header_y, container_width + cpu_width + mem_usage_width + mem_perc_width, headers[4].ljust(net_io_width), curses.A_BOLD)
-                stdscr.addstr(header_y, container_width + cpu_width + mem_usage_width + mem_perc_width + net_io_width, headers[5].ljust(block_io_width), curses.A_BOLD)
-                stdscr.addstr(header_y, container_width + cpu_width + mem_usage_width + mem_perc_width + net_io_width + block_io_width, headers[6], curses.A_BOLD)
+                # Draw headers according to calculated widths
+                stdscr.addstr(header_y, x_pos, self.truncate_text(headers[0], widths["container"]), curses.A_BOLD)
+                x_pos += widths["container"] + 1
+                
+                if x_pos < max_x:
+                    stdscr.addstr(header_y, x_pos, self.truncate_text(headers[1], widths["cpu"]), curses.A_BOLD)
+                    x_pos += widths["cpu"] + 1
+                
+                if x_pos < max_x:
+                    stdscr.addstr(header_y, x_pos, self.truncate_text(headers[2], widths["mem_usage"]), curses.A_BOLD)
+                    x_pos += widths["mem_usage"] + 1
+                
+                if x_pos < max_x:
+                    stdscr.addstr(header_y, x_pos, self.truncate_text(headers[3], widths["mem_perc"]), curses.A_BOLD)
+                    x_pos += widths["mem_perc"] + 1
+                
+                if x_pos < max_x:
+                    stdscr.addstr(header_y, x_pos, self.truncate_text(headers[4], widths["net_io"]), curses.A_BOLD)
+                    x_pos += widths["net_io"] + 1
+                
+                if x_pos < max_x:
+                    stdscr.addstr(header_y, x_pos, self.truncate_text(headers[5], widths["block_io"]), curses.A_BOLD)
+                    x_pos += widths["block_io"] + 1
+                
+                if x_pos < max_x:
+                    stdscr.addstr(header_y, x_pos, self.truncate_text(headers[6], widths["pids"]), curses.A_BOLD)
                 
                 # Draw separator
                 separator = "-" * (max_x - 1)
@@ -233,60 +318,78 @@ class DockerStatsTUI:
                     container_id = container.get('ID', container.get('Id', ''))
                     container_name = container.get('Name', container.get('Names', ''))
                     
-                    # Truncate container name if too long
-                    if len(container_name) > container_width - 3:
-                        container_name = container_name[:container_width - 3] + "..."
+                    # Truncate container name
+                    container_name = self.truncate_text(container_name, widths["container"])
+                    
+                    # Column position tracking
+                    x_pos = 0
                     
                     # Draw container name
-                    stdscr.addstr(row, 0, container_name.ljust(container_width), MAGENTA)
+                    stdscr.addstr(row, x_pos, container_name, MAGENTA)
+                    x_pos += widths["container"] + 1
                     
-                    # Draw stats if available
-                    if container_id in self.stats:
+                    # Draw stats if available and if terminal is wide enough
+                    if container_id in self.stats and x_pos < max_x:
                         stats = self.stats[container_id]
                         
                         # CPU usage
-                        cpu_perc = stats['cpu_perc']
-                        cpu_color = GREEN
-                        if cpu_perc.endswith('%'):
-                            cpu_value = float(cpu_perc[:-1])
-                            if cpu_value > 50:
-                                cpu_color = YELLOW
-                            if cpu_value > 80:
-                                cpu_color = RED
-                        stdscr.addstr(row, container_width, cpu_perc.ljust(cpu_width), cpu_color)
+                        if x_pos < max_x:
+                            cpu_perc = stats['cpu_perc']
+                            cpu_color = GREEN
+                            if cpu_perc.endswith('%'):
+                                cpu_value = float(cpu_perc[:-1])
+                                if cpu_value > 50:
+                                    cpu_color = YELLOW
+                                if cpu_value > 80:
+                                    cpu_color = RED
+                            cpu_perc = self.truncate_text(cpu_perc, widths["cpu"])
+                            stdscr.addstr(row, x_pos, cpu_perc, cpu_color)
+                            x_pos += widths["cpu"] + 1
                         
                         # Memory usage
-                        mem_usage = stats['mem_usage']
-                        stdscr.addstr(row, container_width + cpu_width, mem_usage.ljust(mem_usage_width))
+                        if x_pos < max_x:
+                            mem_usage = self.truncate_text(stats['mem_usage'], widths["mem_usage"])
+                            stdscr.addstr(row, x_pos, mem_usage)
+                            x_pos += widths["mem_usage"] + 1
                         
                         # Memory percentage
-                        mem_perc = stats['mem_perc']
-                        mem_color = GREEN
-                        if mem_perc.endswith('%'):
-                            mem_value = float(mem_perc[:-1])
-                            if mem_value > 50:
-                                mem_color = YELLOW
-                            if mem_value > 80:
-                                mem_color = RED
-                        stdscr.addstr(row, container_width + cpu_width + mem_usage_width, mem_perc.ljust(mem_perc_width), mem_color)
+                        if x_pos < max_x:
+                            mem_perc = stats['mem_perc']
+                            mem_color = GREEN
+                            if mem_perc.endswith('%'):
+                                mem_value = float(mem_perc[:-1])
+                                if mem_value > 50:
+                                    mem_color = YELLOW
+                                if mem_value > 80:
+                                    mem_color = RED
+                            mem_perc = self.truncate_text(mem_perc, widths["mem_perc"])
+                            stdscr.addstr(row, x_pos, mem_perc, mem_color)
+                            x_pos += widths["mem_perc"] + 1
                         
                         # Network I/O
-                        net_io = stats['net_io']
-                        stdscr.addstr(row, container_width + cpu_width + mem_usage_width + mem_perc_width, net_io.ljust(net_io_width))
+                        if x_pos < max_x:
+                            net_io = self.truncate_text(stats['net_io'], widths["net_io"])
+                            stdscr.addstr(row, x_pos, net_io)
+                            x_pos += widths["net_io"] + 1
                         
                         # Block I/O
-                        block_io = stats['block_io']
-                        stdscr.addstr(row, container_width + cpu_width + mem_usage_width + mem_perc_width + net_io_width, block_io.ljust(block_io_width))
+                        if x_pos < max_x:
+                            block_io = self.truncate_text(stats['block_io'], widths["block_io"])
+                            stdscr.addstr(row, x_pos, block_io)
+                            x_pos += widths["block_io"] + 1
                         
                         # PIDs
-                        pids = stats['pids']
-                        stdscr.addstr(row, container_width + cpu_width + mem_usage_width + mem_perc_width + net_io_width + block_io_width, pids)
+                        if x_pos < max_x:
+                            pids = self.truncate_text(stats['pids'], widths["pids"])
+                            stdscr.addstr(row, x_pos, pids)
                     
                     row += 1
                 
-                # Draw footer
-                footer = "Press 'q' to quit, 'r' to refresh"
-                stdscr.addstr(max_y - 1, 0, footer)
+                # Draw footer if there's room
+                if max_y > 4:
+                    footer = "Press 'q' to quit, 'r' to refresh"
+                    footer = self.truncate_text(footer, max_x - 1)
+                    stdscr.addstr(max_y - 1, 0, footer)
                 
                 # Refresh the screen
                 stdscr.refresh()
@@ -303,6 +406,9 @@ class DockerStatsTUI:
                         self.get_compose_containers()
                     else:
                         self.get_all_containers()
+                elif key == curses.KEY_RESIZE:
+                    # Just let the loop redraw everything with new dimensions
+                    stdscr.clear()
                 
                 # If no key was pressed, just update the containers periodically
                 if key == -1:
@@ -311,9 +417,10 @@ class DockerStatsTUI:
                     else:
                         self.get_all_containers()
                 
-            except curses.error:
-                # Handle terminal resize or other curses errors
-                pass
+            except curses.error as e:
+                # Clear and continue on curses errors
+                stdscr.clear()
+                continue
             except Exception as e:
                 # Exit on other exceptions
                 self.running = False
