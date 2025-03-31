@@ -11,6 +11,7 @@ This repository contains various utility scripts for managing video files, inclu
 - Python 3.6+
 - FFmpeg (required for most scripts)
 - ffprobe (component of FFmpeg, used for media analysis)
+- MKVToolNix (required for MKV manipulation scripts)
 
 ## Scripts
 
@@ -124,11 +125,78 @@ Extract only subtitle streams:
 python video-extract.py /path/to/videos --subs_only
 ```
 
+### 5. video-extract-merge.py
+
+Creates new MKV files by merging original video with extracted or modified audio and subtitle tracks.
+
+#### Features:
+- Combines video tracks with separate audio and subtitle files
+- Preserves original video quality (no re-encoding)
+- Supports batch processing of multiple video files
+- Output files maintain the original video quality with the added/modified tracks
+
+#### Usage:
+```bash
+python video-extract-merge.py [--video_dir VIDEO_DIR] [--extract_dir EXTRACT_DIR] [--output_dir OUTPUT_DIR]
+```
+
+#### Example:
+
+Merge video with extracted audio and subtitle tracks:
+```bash
+python video-extract-merge.py --video_dir /path/to/videos --extract_dir ./extracted_content --output_dir ./Merged
+```
+
+Use default directories (Video, Extracted, Merged):
+```bash
+python video-extract-merge.py
+```
+
+### 6. track-name-fixer.py
+
+Standardizes track names in MKV files to ensure consistent naming conventions across audio and subtitle tracks.
+
+#### Features:
+- Automatically detects track types and languages
+- Standardizes track names (e.g., "English Audio", "Signs & Songs")
+- Sets appropriate language tags for all tracks
+- Properly marks forced subtitle tracks
+- Supports dry-run mode to preview changes
+- Can process entire directories of MKV files or single files
+
+#### Usage:
+```bash
+python track-name-fixer.py [--input_dir DIRECTORY] [--single FILE] [--dry-run] [--debug]
+```
+
+#### Example:
+
+Fix track names in all MKV files in the default directory (./Merged):
+```bash
+python track-name-fixer.py
+```
+
+Process a single MKV file:
+```bash
+python track-name-fixer.py --single /path/to/video.mkv
+```
+
+Preview changes without applying them:
+```bash
+python track-name-fixer.py --input_dir /path/to/mkv/files --dry-run
+```
+
+Show detailed debug information during processing:
+```bash
+python track-name-fixer.py --debug
+```
+
 ## Notes
 
 - Always backup your files before processing
 - Use the `--dry-run` option to preview changes before applying them
 - Most scripts require FFmpeg to be installed and available in your PATH
+- MKV manipulation scripts require MKVToolNix to be installed
 
 ## License
 
