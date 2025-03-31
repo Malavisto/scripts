@@ -55,7 +55,92 @@ Skip the renaming step and only process extraction and merging:
 python auto-video-processor.py --skip_rename
 ```
 
-### 2. file-renamer.py
+### 2. auto-video-processor-sonarr.py
+
+An extended version of the auto-video-processor script that adds Sonarr-compatible file renaming as the final step in the workflow.
+
+#### Features:
+- Includes all functionality from auto-video-processor.py
+- Adds automatic renaming of output files to match Sonarr naming conventions
+- Optionally retrieves episode titles from Sonarr API
+- Supports multiple Sonarr naming formats
+- Can be configured to skip any step in the process
+
+#### Usage:
+```bash
+python auto-video-processor-sonarr.py [--video_dir VIDEO_DIR] [--extract_dir EXTRACT_DIR] 
+                                     [--output_dir OUTPUT_DIR] [--dry_run] [--recursive]
+                                     [--skip_rename] [--skip_extract] [--sonarr_format FORMAT]
+                                     [--sonarr_url URL] [--api_key KEY] [--skip_sonarr_rename]
+```
+
+#### Example:
+
+Process videos and rename according to Sonarr conventions:
+```bash
+python auto-video-processor-sonarr.py --sonarr_format standard_episode
+```
+
+Process videos and rename with Sonarr integration to get episode titles:
+```bash
+python auto-video-processor-sonarr.py --sonarr_format standard_episode --sonarr_url http://localhost:8989 --api_key YOUR_API_KEY
+```
+
+Process videos using a custom naming format:
+```bash
+python auto-video-processor-sonarr.py --sonarr_format custom --custom_format "{Series Title} - {season}x{episode:02d}"
+```
+
+### 3. sonarr-renamer.py
+
+A standalone script that renames video files to match Sonarr's naming conventions, ideal for post-processing after using auto-video-processor.py.
+
+#### Features:
+- Multiple built-in naming formats to match different Sonarr preferences
+- Optional integration with Sonarr API to fetch episode titles
+- Preserves video codec information in filenames
+- Supports recursive directory processing
+- Dry-run mode to preview changes
+- Detailed logging
+
+#### Usage:
+```bash
+python sonarr-renamer.py --input_dir INPUT_DIR [--naming_format FORMAT]
+                         [--dry_run] [--recursive] [--api_key API_KEY] 
+                         [--sonarr_url SONARR_URL]
+```
+
+#### Supported Naming Formats:
+- `standard`: "Show Name - S01E05"
+- `standard_episode`: "Show Name - S01E05 - Episode Title"
+- `scene`: "Show.Name.S01E05"
+- `scene_episode`: "Show.Name.S01E05.Episode.Title"
+- `folder_season_episode`: "Show Name/Season 1/S01E05 - Episode Title"
+- `custom`: Custom format defined with `--custom_format`
+
+#### Example:
+
+Rename all video files in a directory to standard Sonarr format:
+```bash
+python sonarr-renamer.py --input_dir ./Merged --naming_format standard
+```
+
+Rename video files with episode titles from Sonarr:
+```bash
+python sonarr-renamer.py --input_dir ./Merged --naming_format standard_episode --sonarr_url http://localhost:8989 --api_key YOUR_API_KEY
+```
+
+Preview renaming using the scene format:
+```bash
+python sonarr-renamer.py --input_dir ./Merged --naming_format scene --dry_run
+```
+
+Create a season folder structure with episode titles:
+```bash
+python sonarr-renamer.py --input_dir ./Merged --naming_format folder_season_episode
+```
+
+### 4. file-renamer.py
 
 Renames video files to follow a consistent naming convention based on show name, season, episode, and video codec.
 
@@ -81,7 +166,7 @@ Rename all video files in directory and subdirectories:
 python file-renamer.py /path/to/show/files --recursive
 ```
 
-### 2. remove_pgs_subs.py
+### 5. remove_pgs_subs.py
 
 Removes PGS subtitle tracks from MKV files. Useful for removing bitmap subtitles while keeping text-based ones.
 
@@ -107,7 +192,7 @@ Remove PGS subtitles and save to a different directory:
 python remove_pgs_subs.py /path/to/videos --output-dir /path/to/output
 ```
 
-### 3. subtitle_rename.py
+### 6. subtitle_rename.py
 
 Renames subtitle files to follow a consistent naming pattern based on their parent directory name.
 
@@ -133,7 +218,7 @@ Preview renaming with verbose output:
 python subtitle_rename.py /path/to/subtitles --dry-run --verbose
 ```
 
-### 4. video-extract.py
+### 7. video-extract.py
 
 Extracts audio and subtitle streams from video files without transcoding, focusing on English audio and subtitles.
 
@@ -165,7 +250,7 @@ Extract only subtitle streams:
 python video-extract.py /path/to/videos --subs_only
 ```
 
-### 5. video-extract-merge.py
+### 8. video-extract-merge.py
 
 Creates new MKV files by merging original video with extracted or modified audio and subtitle tracks.
 
@@ -192,7 +277,7 @@ Use default directories (Video, Extracted, Merged):
 python video-extract-merge.py
 ```
 
-### 7. track-name-fixer.py
+### 9. track-name-fixer.py
 
 Standardizes track names in MKV files to ensure consistent naming conventions across audio and subtitle tracks.
 
@@ -230,6 +315,19 @@ Show detailed debug information during processing:
 ```bash
 python track-name-fixer.py --debug
 ```
+
+## Sonarr Integration
+
+The Sonarr-enabled scripts support integration with your Sonarr instance to retrieve episode titles and ensure naming consistency. To use this feature:
+
+1. Locate your Sonarr API key (Settings > General)
+2. Use the `--sonarr_url` parameter to specify your Sonarr instance URL (e.g., http://localhost:8989)
+3. Use the `--api_key` parameter with your Sonarr API key
+
+With Sonarr integration enabled, the scripts can:
+- Automatically fetch episode titles
+- Ensure filenames match Sonarr's expected format
+- Create files that will be correctly identified by Sonarr's import process
 
 ## Notes
 

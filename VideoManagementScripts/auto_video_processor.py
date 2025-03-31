@@ -20,7 +20,6 @@ import os
 import sys
 import argparse
 import subprocess
-import shutil
 from pathlib import Path
 import time
 import logging
