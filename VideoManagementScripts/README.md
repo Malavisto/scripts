@@ -15,7 +15,47 @@ This repository contains various utility scripts for managing video files, inclu
 
 ## Scripts
 
-### 1. file-renamer.py
+### 1. auto-video-processor.py (Main Script)
+
+The primary script that automates the entire video processing workflow by utilizing the other scripts in this collection.
+
+#### Features:
+- Coordinates the complete video processing pipeline in a single command
+- Handles file renaming, audio/subtitle extraction, merging, and track name standardization
+- Provides detailed logging of all operations
+- Supports dry-run mode to preview actions without changing files
+- Configurable to skip specific processing steps as needed
+
+#### Usage:
+```bash
+python auto-video-processor.py [--video_dir VIDEO_DIR] [--extract_dir EXTRACT_DIR] 
+                              [--output_dir OUTPUT_DIR] [--dry_run] [--recursive]
+                              [--skip_rename] [--skip_extract]
+```
+
+#### Example:
+
+Process videos using default directories (./Video, ./Extracted, ./Merged):
+```bash
+python auto-video-processor.py
+```
+
+Process videos in a specific directory with custom output locations:
+```bash
+python auto-video-processor.py --video_dir /path/to/videos --extract_dir ./extracted_content --output_dir ./processed
+```
+
+Preview all operations without making changes:
+```bash
+python auto-video-processor.py --dry_run
+```
+
+Skip the renaming step and only process extraction and merging:
+```bash
+python auto-video-processor.py --skip_rename
+```
+
+### 2. file-renamer.py
 
 Renames video files to follow a consistent naming convention based on show name, season, episode, and video codec.
 
@@ -152,7 +192,7 @@ Use default directories (Video, Extracted, Merged):
 python video-extract-merge.py
 ```
 
-### 6. track-name-fixer.py
+### 7. track-name-fixer.py
 
 Standardizes track names in MKV files to ensure consistent naming conventions across audio and subtitle tracks.
 
