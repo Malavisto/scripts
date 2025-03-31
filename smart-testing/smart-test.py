@@ -1,3 +1,4 @@
+import concurrent.futures
 from pathlib import Path
 import os
 import subprocess
@@ -10,14 +11,17 @@ import platform
 
 # Set up constants
 SCRIPT_DIR = Path(__file__).parent
-ERRORLOG = SCRIPT_DIR / "smart_test_error.log"
-SMART_RESULTS = Path("/tmp/smart_results.txt")
+ERRORLOG = SCRIPT_DIR / "smart_test.log"
+SMART_RESULTS_DIR = Path("/tmp/smart_results")
 
 class SMARTTester:
     def __init__(self):
         self.setup_logging()
         self.load_config()
         self.os_type = platform.system().lower()
+        
+        # Create results directory if it doesn't exist
+        SMART_RESULTS_DIR.mkdir(exist_ok=True)
 
     def setup_logging(self):
         try:
@@ -37,16 +41,24 @@ class SMARTTester:
         
         # Load required configuration
         self.webhook_url = os.getenv('DISCORD_WEBHOOK_URL')
-        self.drive = os.getenv('DRIVE', '/dev/sda')  # Default to /dev/sda if not specified
+        
+        # Support multiple drives - parse comma-separated list from config
+        drives_config = os.getenv('DRIVES', '/dev/sda')
+        self.drives = [drive.strip() for drive in drives_config.split(',')]
+        
         self.smart_timeout = int(os.getenv('SMART_TIMEOUT', '600'))  # Default to 600 seconds
-        self.results_path = Path(os.getenv('SMART_RESULTS', '/tmp/smart_results.txt'))
+        self.results_dir = Path(os.getenv('SMART_RESULTS_DIR', '/tmp/smart_results')) # Defaults to /tmp/smart_results
         
         # Validate configuration
         if not self.webhook_url:
             logging.error("Discord webhook URL is not set")
             exit(1)
         
-        logging.info(f"Configuration loaded - Drive: {self.drive}, Timeout: {self.smart_timeout}s")
+        if not self.drives:
+            logging.error("No drives specified for testing")
+            exit(1)
+        
+        logging.info(f"Configuration loaded - Drives: {self.drives}, Timeout: {self.smart_timeout}s")
 
     def get_drive_type(self, device):
         """Determine if the device is SATA or NVMe"""
@@ -71,67 +83,71 @@ class SMARTTester:
             logging.error(f"Command failed: {e.cmd} (code: {e.returncode})")
             return None
 
-    def start_smart_test(self):
-        drive_type = self.get_drive_type(self.drive)
+    def start_smart_test(self, drive):
+        drive_type = self.get_drive_type(drive)
         if not drive_type:
             return False
 
         try:
             if drive_type == "nvme":
                 if self.os_type == "linux":
-                    return self.run_command(["nvme", "smart-log", self.drive])
+                    return self.run_command(["nvme", "smart-log", drive])
                 else:
                     return self.run_command([
                         "powershell", "-Command",
-                        f"Get-PhysicalDisk | Where-Object DeviceID -eq '{self.drive}' | Get-StorageReliabilityCounter"
+                        f"Get-PhysicalDisk | Where-Object DeviceID -eq '{drive}' | Get-StorageReliabilityCounter"
                     ])
             else:
-                return self.run_command(["smartctl", "-t", "short", self.drive])
+                return self.run_command(["smartctl", "-t", "short", drive])
         except Exception as e:
-            logging.error(f"Error starting SMART test: {e}")
+            logging.error(f"Error starting SMART test for {drive}: {e}")
             return False
 
-    def check_smart_test_status(self):
-        drive_type = self.get_drive_type(self.drive)
+    def check_smart_test_status(self, drive):
+        drive_type = self.get_drive_type(drive)
         if drive_type == "nvme":
             return True  # NVMe tests complete immediately
         
-        status = self.run_command(["smartctl", "-c", self.drive])
+        status = self.run_command(["smartctl", "-c", drive])
         return "Self-test execution status:      (   0)" in status if status else False
 
-    def wait_for_smart_test(self):
+    def wait_for_smart_test(self, drive):
         start_time = time.time()
         while time.time() - start_time < self.smart_timeout:
-            if self.check_smart_test_status():
-                logging.info("SMART test completed successfully")
+            if self.check_smart_test_status(drive):
+                logging.info(f"SMART test completed successfully for {drive}")
                 return True
             time.sleep(30)
-        logging.error(f"SMART test did not complete within {self.smart_timeout} seconds")
+        logging.error(f"SMART test for {drive} did not complete within {self.smart_timeout} seconds")
         return False
 
-    def collect_smart_data(self):
-        drive_type = self.get_drive_type(self.drive)
+    def collect_smart_data(self, drive):
+        drive_type = self.get_drive_type(drive)
         if not drive_type:
             return None
+
+        # Create a unique filename based on the drive name
+        drive_name = Path(drive).name
+        results_path = SMART_RESULTS_DIR / f"smart_results_{drive_name}.txt"
 
         try:
             if drive_type == "nvme":
                 if self.os_type == "linux":
-                    result = self.run_command(["nvme", "smart-log", self.drive])
+                    result = self.run_command(["nvme", "smart-log", drive])
                 else:
                     result = self.run_command([
                         "powershell", "-Command",
-                        f"Get-PhysicalDisk | Where-Object DeviceID -eq '{self.drive}' | Get-StorageReliabilityCounter"
+                        f"Get-PhysicalDisk | Where-Object DeviceID -eq '{drive}' | Get-StorageReliabilityCounter"
                     ])
             else:
-                result = self.run_command(["smartctl", "-a", self.drive])
+                result = self.run_command(["smartctl", "-a", drive])
 
             if result:
-                with open(self.results_path, 'w') as f:
+                with open(results_path, 'w') as f:
                     f.write(result)
-                return result
+                return {"result": result, "path": results_path}
         except Exception as e:
-            logging.error(f"Error collecting SMART data: {e}")
+            logging.error(f"Error collecting SMART data for {drive}: {e}")
             return None
 
     def parse_smart_results(self, results, drive_type):
@@ -162,44 +178,87 @@ class SMARTTester:
 
     def send_discord_message(self, message, file_path=None):
         try:
-            files = {"file": open(file_path, "rb")} if file_path and Path(file_path).exists() else None
-            response = requests.post(self.webhook_url, data={"content": message}, files=files)
-            response.raise_for_status()
+            files = None
+            if file_path and Path(file_path).exists():
+                with open(file_path, "rb") as file:
+                    files = {"file": file}
+                    response = requests.post(self.webhook_url, data={"content": message}, files=files)
+                    response.raise_for_status()
+            else:
+                response = requests.post(self.webhook_url, data={"content": message})
+                response.raise_for_status()
             return True
         except requests.RequestException as e:
             logging.error(f"Failed to send Discord message: {str(e)}")
             return False
-        finally:
-            if files:
-                files["file"].close()
+                
+    def process_drive(self, drive):
+        """Process a single drive's SMART test"""
+        logging.info(f"Starting SMART test for {drive}")
+        
+        if not self.start_smart_test(drive):
+            error_msg = f"Error: Failed to start SMART test on {drive}"
+            logging.error(error_msg)
+            self.send_discord_message(error_msg)
+            return False
+
+        if not self.wait_for_smart_test(drive):
+            error_msg = f"Error: SMART test did not complete on {drive}"
+            logging.error(error_msg)
+            self.send_discord_message(error_msg)
+            return False
+
+        data = self.collect_smart_data(drive)
+        if not data:
+            error_msg = f"Error: Failed to collect SMART data for {drive}"
+            logging.error(error_msg)
+            self.send_discord_message(error_msg)
+            return False
+
+        drive_type = self.get_drive_type(drive)
+        parsed_results = self.parse_smart_results(data["result"], drive_type)
+        logging.info(f"Parsed SMART test results for {drive}")
+        logging.info(parsed_results)
+
+        message = (f"SMART log of {drive} ({drive_type.upper()}) on "
+                  f"{os.uname().nodename if hasattr(os, 'uname') else platform.node()} "
+                  f"at {datetime.now()}")
+        
+        self.send_discord_message(message, file_path=data["path"])
+        return True
 
 def main():
     tester = SMARTTester()
     logging.info("Script started")
-
-    if not tester.start_smart_test():
-        tester.send_discord_message(f"Error: Failed to start SMART test on {tester.drive}")
-        return
-
-    if not tester.wait_for_smart_test():
-        tester.send_discord_message(f"Error: SMART test did not complete on {tester.drive}")
-        return
-
-    results = tester.collect_smart_data()
-    if not results:
-        tester.send_discord_message(f"Error: Failed to collect SMART data for {tester.drive}")
-        return
-
-    drive_type = tester.get_drive_type(tester.drive)
-    parsed_results = tester.parse_smart_results(results, drive_type)
-    logging.info("Parsed SMART test results")
-    logging.info(parsed_results)
-
-    message = (f"SMART log of {tester.drive} ({drive_type.upper()}) on "
-              f"{os.uname().nodename if hasattr(os, 'uname') else platform.node()} "
-              f"at {datetime.now()}")
-    tester.send_discord_message(message, file_path=tester.results_path)
-
+    
+    # Process all drives in parallel and track results
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Submit all drive processing tasks
+        future_to_drive = {executor.submit(tester.process_drive, drive): drive for drive in tester.drives}
+        
+        # Collect results as they complete
+        for future in concurrent.futures.as_completed(future_to_drive):
+            drive = future_to_drive[future]
+            try:
+                results[drive] = future.result()
+                logging.info(f"Completed processing drive: {drive}")
+            except Exception as e:
+                logging.error(f"Error processing drive {drive}: {e}")
+                results[drive] = False
+    
+    # Send a summary message
+    total_drives = len(tester.drives)
+    successful_tests = sum(1 for success in results.values() if success)
+    
+    summary = (f"SMART Test Summary: {successful_tests}/{total_drives} completed successfully\n"
+              f"Host: {os.uname().nodename if hasattr(os, 'uname') else platform.node()}\n"
+              f"Time: {datetime.now()}\n\n")
+    
+    for drive, success in results.items():
+        summary += f"- {drive}: {'✅ Success' if success else '❌ Failed'}\n"
+    
+    tester.send_discord_message(summary)
     logging.info("Script completed")
 
 if __name__ == "__main__":
